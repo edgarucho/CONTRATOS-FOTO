@@ -728,6 +728,7 @@ async function render(){
   if(S.view==='signPrest') return viewSignPrest();
   if(S.view==='calendar')  return viewCalendar();
   if(S.view==='fotos')     return viewFotos();
+  if(S.view==='seleccion') return viewSeleccionAdmin();
   if(S.view==='print')     return viewPrint();
 }
 
@@ -951,6 +952,10 @@ async function viewDetail(){
     <div class="card">
       <div style="color:var(--muted);font-size:13.5px;margin-bottom:10px">Sube las fotos de la sesión a Google Drive para que tu cliente elija sus favoritas.</div>
       <button class="btn btn-ghost btn-sm" data-act="goFotos" data-code="${esc(c.code)}" style="width:100%">${IC.camera} Gestionar fotos de la sesión</button>
+      ${c.seleccionConfirmada
+        ? `<div style="margin-top:12px;padding:10px 12px;background:#eafaf0;border:1px solid #bfe6cf;border-radius:10px;font-size:13px;color:#1b6b3a"><strong>✓ Selección lista.</strong> Tu cliente ya eligió sus 20 fotos y su foto grande.</div>
+      <button class="btn btn-gold btn-sm" data-act="goSeleccion" data-code="${esc(c.code)}" style="width:100%;margin-top:10px">${IC.camera} Ver la selección del cliente</button>`
+        : `<div style="color:var(--muted);font-size:12.5px;margin-top:10px">Tu cliente aún no ha elegido sus fotos.</div>`}
     </div>
     <div class="btn-row" style="margin-top:6px">
       <button class="btn btn-primary" data-act="print" data-code="${esc(c.code)}">${IC.print} Imprimir / PDF</button>
@@ -1117,6 +1122,53 @@ async function uploadFotos(files){
   try{ const r=await apiPost({action:'listFotos', code:S.code}); const n=(r.fotos||[]).length; const c=await getContract(S.code); if(c){ c.fotoCount=n; await saveContract(c); } }catch(e){}
   setTimeout(function(){ go('fotos', S.code); }, 800);
 }
+async function copyText(txt){
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(txt); return true; } }catch(e){}
+  try{ const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }catch(e){ return false; }
+}
+
+async function viewSeleccionAdmin(){
+  const c = await getContract(S.code);
+  if(!c){ app.innerHTML='<div class="card"><div class="empty">No se encontró el contrato.</div></div>'; return; }
+  if(!c.seleccionConfirmada || !(c.seleccion||[]).length){
+    app.innerHTML = `
+      <div class="eyebrow">Selección</div>
+      <h2 class="page">Selección del cliente</h2>
+      <div class="card"><div class="empty" style="padding:24px 16px">${IC.camera}<div style="margin-top:8px">Tu cliente aún no ha terminado de elegir sus fotos.</div></div></div>
+      <button class="btn btn-ghost" data-act="selBack" style="margin-top:14px">Volver al contrato</button>`;
+    bind(); return;
+  }
+  app.innerHTML = `<div class="eyebrow">Selección</div><h2 class="page">Selección del cliente</h2><p class="sub">Cargando fotos…</p>`;
+  let fotos=[], folderUrl='';
+  if(useBackend){ try{ const r=await apiPost({action:'listFotos', code:c.code}); fotos=r.fotos||[]; folderUrl=r.folderUrl||''; }catch(e){} }
+  const byId={}; fotos.forEach(f=>{ byId[f.id]=f.name; });
+  const sel = c.seleccion||[];
+  const bigName = c.fotoGrande ? (byId[c.fotoGrande]||'(archivo no encontrado)') : '';
+  const when = c.seleccionConfirmadaAt ? new Date(c.seleccionConfirmadaAt).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
+  S._selNames = { big:bigName, list: sel.map(id=>byId[id]||id) };
+  const bigBlock = c.fotoGrande ? `
+    <div class="sectionline"><span>Foto grande (ampliación) ★</span></div>
+    <div class="foto-thumb" style="aspect-ratio:4/3;max-width:300px;margin:0 auto;border:2px solid var(--gold)"><img loading="lazy" src="https://drive.google.com/thumbnail?id=${esc(c.fotoGrande)}&sz=w800" alt=""></div>
+    <div style="text-align:center;font-weight:700;font-size:13px;margin:6px 0 2px;word-break:break-all">${esc(bigName)}</div>` : '';
+  const grid = sel.map((id,i)=>`
+    <div>
+      <div class="foto-thumb"><img loading="lazy" src="https://drive.google.com/thumbnail?id=${esc(id)}&sz=w400" alt=""><div style="position:absolute;top:4px;left:4px;background:var(--ink);color:#fff;border-radius:6px;font-size:11px;font-weight:700;padding:2px 6px;line-height:1">${i+1}</div></div>
+      <div style="font-size:10.5px;color:var(--muted);text-align:center;margin-top:3px;word-break:break-all;line-height:1.2">${esc(byId[id]||id)}</div>
+    </div>`).join('');
+  app.innerHTML = `
+    <div class="eyebrow">Selección ✓</div>
+    <h2 class="page">Selección del cliente</h2>
+    <p class="sub">${esc(c.nombreContratante||c.code)} · ${sel.length} foto(s) elegida(s)${when?(' · confirmada el '+when):''}</p>
+    ${bigBlock}
+    <div class="sectionline"><span>Las ${sel.length} fotos elegidas</span></div>
+    <div class="foto-grid">${grid}</div>
+    ${folderUrl?`<div style="text-align:center;margin:14px 0 4px"><a href="${esc(folderUrl)}" target="_blank" style="font-size:13px;color:#a9863f;font-weight:600">Abrir carpeta en Google Drive</a></div>`:''}
+    <button class="btn btn-gold" data-act="copySelNames" style="margin-top:10px">${IC.copy} Copiar lista de nombres</button>
+    <button class="btn btn-ghost" data-act="selBack" style="margin-top:10px">Volver al contrato</button>
+  `;
+  bind();
+}
+
 async function viewFotos(){
   const c=await getContract(S.code);
   if(!c){ app.innerHTML='<div class="card"><div class="empty">No se encontró el contrato.</div></div>'; return; }
@@ -1175,6 +1227,9 @@ async function onAction(e){
     case 'savePsig': await doSavePsig(); break;
     case 'psigBack': go('detail', S.code); break;
     case 'goFotos': go('fotos', code); break;
+    case 'goSeleccion': go('seleccion', code); break;
+    case 'selBack': go('detail', S.code); break;
+    case 'copySelNames': { const s=S._selNames; if(!s){ toast('Nada que copiar'); break; } const txt='SELECCIÓN DEL CLIENTE\n\nFOTO GRANDE (ampliación): '+s.big+'\n\n20 FOTOS ELEGIDAS:\n'+s.list.map((n,i)=>(i+1)+'. '+n).join('\n'); const okc=await copyText(txt); if(okc){ toast('Lista copiada ✓'); } else { window.prompt('Copia la lista de nombres:', txt); } break; }
     case 'pickFotos': { const inp=document.getElementById('fotoInput'); if(inp) inp.click(); break; }
     case 'fotosBack': go('detail', S.code); break;
     case 'print': go('print', code); break;
