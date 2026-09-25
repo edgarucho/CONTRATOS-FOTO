@@ -1306,11 +1306,6 @@ function paintDetail(c){
            <button class="btn btn-gold btn-sm" data-act="goPhotobook" data-code="${esc(c.code)}" style="width:100%">${IC.camera} Ver y descargar photobook (300 ppp)</button>`
         : `<div style="color:var(--muted);font-size:12.5px">El cliente aún no ha enviado su photobook. Cuando lo termine, aquí podrás verlo y descargarlo listo para imprimir.</div>`}
     </div>`:''}
-    <div class="sectionline"><span>Película / entrega final</span></div>
-    <div class="card">
-      <div style="color:var(--muted);font-size:13.5px;margin-bottom:10px">Arma la página cinematográfica de entrega (intro, capítulos, película y fotos) para subir a GitHub o meter en una USB.${c.pelicula?' <strong style="color:#1b6b3a">✓ Ya la configuraste</strong>':''}</div>
-      <button class="btn btn-gold btn-sm" data-act="goPelicula" data-code="${esc(c.code)}" style="width:100%">🎬 Editor de Película</button>
-    </div>
     <div class="btn-row" style="margin-top:6px">
       <button class="btn btn-primary" data-act="print" data-code="${esc(c.code)}">${IC.print} Imprimir / PDF</button>
       <button class="btn btn-ghost" data-act="editOwner" data-code="${esc(c.code)}">${IC.edit} Llenar datos</button>
@@ -1956,9 +1951,9 @@ async function viewEvento(){
   const c=await getContract(S.code);
   if(!c){ app.innerHTML='<div class="card"><div class="empty">No se encontró el contrato.</div></div>'; return; }
   app.innerHTML = `<div class="eyebrow">Evento</div><h2 class="page">Galería del evento</h2><p class="sub">Preparando carpeta…</p>`;
-  let st={carpetas:[], folderUrl:'', limit:0};
+  let st={carpetas:[], folderUrl:'', limit:0, pelicula:null};
   if(useBackend){
-    try{ const rc=await apiPost({action:'evento_carpeta', token:ADMIN_TOKEN, code:c.code}); if(rc&&rc.folderUrl) st.folderUrl=rc.folderUrl; }catch(e){}
+    try{ const rc=await apiPost({action:'evento_carpeta', token:ADMIN_TOKEN, code:c.code}); if(rc&&rc.folderUrl){ st.folderUrl=rc.folderUrl; st.pelicula={folderUrl:rc.peliculaUrl||'', videoId:rc.videoId||'', videoName:rc.videoName||''}; } }catch(e){}
     try{ const r=await apiPost({action:'evento_estructura', code:c.code}); if(r&&!r.error){ st.carpetas=r.carpetas||[]; st.limit=r.limit||0; if(r.folderUrl) st.folderUrl=r.folderUrl; } }catch(e){ toast('No se pudo cargar la galería'); }
   }
   app._evStruct=st;
@@ -1989,6 +1984,13 @@ async function viewEvento(){
       ${st.folderUrl?`<a class="btn btn-gold" href="${esc(st.folderUrl)}" target="_blank" rel="noopener" style="box-sizing:border-box">📂 Abrir carpeta del evento en Google Drive</a>`:''}
       <button class="btn btn-ghost btn-sm" data-act="evActualizar" style="width:100%;margin-top:8px">${IC.refresh} Ya subí fotos — actualizar</button>
       <div class="hint" style="margin-top:8px">Puedes crear subcarpetas (Ceremonia, Recepción…) dentro de esa carpeta en Drive para separarlas.</div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div style="font-family:'Montserrat';font-weight:800;font-size:14px;margin-bottom:6px">🎬 Película del evento</div>
+      <div style="font-size:13px;color:#3a382f;margin-bottom:10px;line-height:1.5">Sube el video de la película <strong>directo a Google Drive</strong>, en la carpeta <strong>"Película"</strong>. El cliente podrá verla en su portal y compartir el link.</div>
+      ${(st.pelicula&&st.pelicula.folderUrl)?`<a class="btn btn-gold" href="${esc(st.pelicula.folderUrl)}" target="_blank" rel="noopener" style="box-sizing:border-box">🎬 Abrir carpeta "Película" en Google Drive</a>`:''}
+      <button class="btn btn-ghost btn-sm" data-act="evActualizar" style="width:100%;margin-top:8px">${IC.refresh} Ya subí la película — actualizar</button>
+      <div class="hint" style="margin-top:8px">${(st.pelicula&&st.pelicula.videoId)?('✓ Película detectada: <strong>'+esc(st.pelicula.videoName||'video')+'</strong>. El cliente ya puede verla.'):'Aún no hay video en la carpeta "Película". Súbelo ahí y toca "actualizar".'}</div>
     </div>
     <div class="card" style="margin-top:12px">
       <div class="field" style="margin-bottom:0"><label>¿Cuántas fotos puede elegir el cliente para imprimir?</label>
